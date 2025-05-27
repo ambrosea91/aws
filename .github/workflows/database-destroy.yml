@@ -1,0 +1,49 @@
+# .github/workflows/database-destroy.yml
+
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select environment (dev, test, prod)"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+      branch:
+        description: "Select branch to destroy from"
+        required: true
+        default: "develop"
+
+jobs:
+  destroy:
+    name: Destroy Aurora PostgreSQL
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan Destroy
+        run: terraform plan -destroy -var-file=${{ github.event.inputs.environment }}.tfvars
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -var-file=${{ github.event.inputs.environment }}.tfvars
