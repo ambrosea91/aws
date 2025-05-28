@@ -36,6 +36,9 @@ jobs:
           role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
           aws-region: us-east-1
 
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
@@ -47,3 +50,4 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -var-file=${{ github.event.inputs.environment }}.tfvars
+
