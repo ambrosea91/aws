@@ -1,5 +1,3 @@
-# .github/workflows/database-deploy.yml
-
 name: Terraform Deploy
 
 on:
@@ -44,6 +42,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
+      - name: Terraform Validate
+        run: terraform validate
+
       - name: Terraform Init
         run: terraform init
 
@@ -53,21 +54,5 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve -var-file=${{ github.event.inputs.environment }}.tfvars
 
-# name: OIDC Test
-# on:
-#   workflow_dispatch:
-
-# jobs:
-#   check-oidc:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       id-token: write
-#       contents: read
-
-#     steps:
-#       - name: Request OIDC token
-#         run: |
-#           echo "Getting OIDC token..."
-#           TOKEN=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL")
-#           echo "OIDC token acquired:"
-#           echo "$TOKEN"
+      - name: Capture Terraform Output
+        run: terraform output
