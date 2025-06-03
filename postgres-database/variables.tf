@@ -1,65 +1,62 @@
-variable "region" {
-  description = "AWS region"
-  type        = string
-}
+##############################################
+# variables.tf
+##############################################
 
-variable "aws_profile" {
-  description = "AWS CLI profile to use"
-  type        = string
-}
-
-variable "db_cluster_name" {
-  description = "The name of the Aurora cluster"
-  type        = string
-}
-
-variable "engine_version" {
-  description = "The Aurora PostgreSQL engine version"
-  type        = string
-}
-
-variable "master_username" {
-  description = "Master DB username"
-  type        = string
-}
-
-variable "master_password" {
-  description = "Master DB password"
-  type        = string
-  sensitive   = true
-}
-
-variable "database_name" {
-  description = "Initial database name"
-  type        = string
-}
-
-variable "vpc_id" {
-  description = "VPC ID"
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "List of subnet IDs"
-  type        = list(string)
-}
-
-variable "security_group_ids" {
-  description = "List of security group IDs"
-  type        = list(string)
-}
-
-variable "instance_class" {
-  description = "Instance class for DB instances"
-  type        = string
-}
-
-variable "instances" {
-  description = "Number of Aurora instances"
-  type        = number
+variable "app_name" {
+  type = string
 }
 
 variable "environment" {
-  description = "Environment tag (e.g. dev, staging, prod)"
-  type        = string
+  type = string
+}
+
+variable "env_suffix" {
+  type = string
+}
+
+variable "initial_db_name" {
+  type = string
+}
+
+variable "master_username" {
+  type = string
+}
+
+variable "master_password" {
+  type = string
+  sensitive = true
+}
+
+variable "kms_key_id" {
+  type = string
+}
+
+variable "security_group_id" {
+  type = string
+}
+
+variable "db_subnet_group" {
+  type = string
+}
+
+variable "db_port" {
+  type = number
+  default = 5433
+}
+
+variable "created_by" {
+  type = string
+  default = "ambrose"
+}
+
+variable "sns_topic_arn" {
+  type = string
+}
+
+variable "s3_bucket" {
+  type = string
+}
+
+variable "dynamodb_table" {
+  type = string
 }
