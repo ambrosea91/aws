@@ -1,0 +1,25 @@
+ERROR
+
+##[debug]Evaluating condition for step: 'Configure AWS credentials'
+##[debug]Evaluating: success()
+##[debug]Evaluating success:
+##[debug]=> true
+##[debug]Result: true
+##[debug]Starting: Configure AWS credentials
+##[debug]Register post job cleanup for action: aws-actions/configure-aws-credentials@v2
+##[debug]Loading inputs
+##[debug]Loading env
+Run aws-actions/configure-aws-credentials@v2
+(node:2043) NOTE: We are formalizing our plans to enter AWS SDK for JavaScript (v2) into maintenance mode in 2023.
+
+Please migrate your code to use AWS SDK for JavaScript (v3).
+For more information, check the migration guide at https://a.co/7PzMCcy
+(Use `node --trace-warnings ...` to show where the warning was created)
+Error: Credentials could not be loaded, please check your action inputs: Could not load credentials from any providers
+##[debug]Node Action run completed with exit code 1
+##[debug]AWS_DEFAULT_REGION='us-east-1'
+##[debug]AWS_REGION='us-east-1'
+##[debug]Finishing: Configure AWS credentials
+
+
+FIX
