@@ -35,11 +35,13 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
           aws-region: us-east-1
+
       - name: Debug AWS Credentials
         run: |
             echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
             echo "AWS_REGION=${AWS_REGION}"
             echo "OIDC Token=${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"
+            
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
