@@ -1,0 +1,283 @@
+name: CDK CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - master
+
+env:
+  AWS_REGION: us-east-2
+  PRIMARY_REGION: us-east-2
+  SECONDARY_REGION: us-west-2
+  NODE_VERSION: '20'
+  SONAR_PROJECT_KEY: 'cdk-infrastructure'
+
+jobs:
+  build-and-test:
+    name: Build and Test CDK Stacks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            mysql/package-lock.json
+            postgres/package-lock.json
+            ec2-instances/package-lock.json
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies - MySQL
+        working-directory: ./mysql
+        run: npm ci
+
+      - name: Install dependencies - PostgreSQL
+        working-directory: ./postgres
+        run: npm ci
+
+      - name: Install dependencies - EC2
+        working-directory: ./ec2-instances
+        run: npm ci
+
+      - name: Build - MySQL
+        working-directory: ./mysql
+        run: npm run build
+
+      - name: Build - PostgreSQL
+        working-directory: ./postgres
+        run: npm run build
+
+      - name: Build - EC2
+        working-directory: ./ec2-instances
+        run: npm run build
+
+      - name: Run security audit - MySQL
+        working-directory: ./mysql
+        run: npm audit --audit-level=high
+
+      - name: Run security audit - PostgreSQL
+        working-directory: ./postgres
+        run: npm audit --audit-level=high
+
+      - name: Run security audit - EC2
+        working-directory: ./ec2-instances
+        run: npm audit --audit-level=high
+
+      - name: SonarQube Scan - MySQL
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: ./mysql
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}-mysql
+            -Dsonar.sources=lib,bin
+            -Dsonar.typescript.tsconfigPath=tsconfig.json
+            -Dsonar.exclusions=node_modules/**,cdk.out/**,*.js.map
+            -Dsonar.projectVersion=${{ github.run_number }}
+
+      - name: SonarQube Scan - PostgreSQL
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: ./postgres
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}-postgres
+            -Dsonar.sources=lib,bin
+            -Dsonar.typescript.tsconfigPath=tsconfig.json
+            -Dsonar.exclusions=node_modules/**,cdk.out/**,*.js.map
+            -Dsonar.projectVersion=${{ github.run_number }}
+
+      - name: SonarQube Scan - EC2
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: ./ec2-instances
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}-ec2-instances
+            -Dsonar.sources=lib,bin
+            -Dsonar.typescript.tsconfigPath=tsconfig.json
+            -Dsonar.exclusions=node_modules/**,cdk.out/**,*.js.map
+            -Dsonar.projectVersion=${{ github.run_number }}
+
+      - name: SonarQube Quality Gate Check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: CDK Synth - MySQL
+        working-directory: ./mysql
+        run: npm run synth
+
+      - name: CDK Synth - PostgreSQL
+        working-directory: ./postgres
+        run: npm run synth
+
+      - name: CDK Synth - EC2
+        working-directory: ./ec2-instances
+        run: npm run synth
+
+      - name: Upload MySQL CloudFormation template
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-template
+          path: mysql/cdk.out/*.template.json
+
+      - name: Upload PostgreSQL CloudFormation template
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-template
+          path: postgres/cdk.out/*.template.json
+
+      - name: Upload EC2 CloudFormation template
+        uses: actions/upload-artifact@v4
+        with:
+          name: ec2-template
+          path: ec2-instances/cdk.out/*.template.json
+
+  # Note: Pull Requests are created MANUALLY by developers on GitHub
+  # GitHub Actions runs checks when PR is created
+  # This ensures proper code review and approval process
+
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies - MySQL
+        working-directory: ./mysql
+        run: npm ci
+
+      - name: Install dependencies - PostgreSQL
+        working-directory: ./postgres
+        run: npm ci
+
+      - name: Install dependencies - EC2
+        working-directory: ./ec2-instances
+        run: npm ci
+
+      - name: Deploy MySQL Aurora Stack - Primary (us-east-2)
+        working-directory: ./mysql
+        run: npm run deploy -- --require-approval never
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.PRIMARY_REGION }}
+          PRIMARY_REGION: ${{ env.PRIMARY_REGION }}
+
+      - name: Deploy PostgreSQL Aurora Stack - Primary (us-east-2)
+        working-directory: ./postgres
+        run: npm run deploy -- --require-approval never
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.PRIMARY_REGION }}
+          PRIMARY_REGION: ${{ env.PRIMARY_REGION }}
+
+      - name: Deploy EC2 Stack (us-east-2)
+        working-directory: ./ec2-instances
+        run: npm run deploy -- --require-approval never
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          EC2_KEY_PAIR_NAME: ${{ secrets.EC2_KEY_PAIR_NAME }}
+
+      - name: Verify Deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          aws cloudformation describe-stacks \
+            --stack-name MysqlAuroraPrimaryStack \
+            --region ${{ env.PRIMARY_REGION }} \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' || echo "Stack not found"
+
+          aws cloudformation describe-stacks \
+            --stack-name PostgresAuroraPrimaryStack \
+            --region ${{ env.PRIMARY_REGION }} \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' || echo "Stack not found"
+
+          aws cloudformation describe-stacks \
+            --stack-name Ec2Stack \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' || echo "Stack not found"
+
+      - name: Comment on commit
+        uses: peter-evans/commit-comment@v3
+        with:
+          body: |
+            ## 🎉 Deployment Complete!
+
+            All CDK stacks have been successfully deployed to AWS.
+
+            ### 📦 Deployed Stacks
+
+            | Stack | Region | Status |
+            |-------|--------|--------|
+            | MySQL Aurora (Primary) | us-east-2 | ✅ Deployed |
+            | PostgreSQL Aurora (Primary) | us-east-2 | ✅ Deployed |
+            | EC2 Instances | us-east-2 | ✅ Deployed |
+
+            ### 🔍 Resources Created
+
+            **MySQL Aurora:**
+            - Global Database Cluster
+            - Writer + Reader instances (db.t3.medium)
+            - CloudWatch alarms and monitoring
+
+            **PostgreSQL Aurora:**
+            - Global Database Cluster
+            - Writer + Reader instances (db.t3.medium)
+            - CloudWatch alarms and monitoring
+
+            **EC2 Instances:**
+            - 2 instances with MySQL 5.7 and PostgreSQL clients
+            - Apache web server
+            - SSM Session Manager enabled
+
+            ### 📊 Build Information
+
+            - **Workflow Run:** #${{ github.run_number }}
+            - **Commit:** ${{ github.sha }}
+            - **Author:** ${{ github.actor }}
+            - **Branch:** ${{ github.ref_name }}
+
+            ---
+
+            *🤖 Deployed by GitHub Actions*
