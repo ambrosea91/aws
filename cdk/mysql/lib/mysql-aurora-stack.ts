@@ -96,18 +96,14 @@ export class MysqlAuroraStack extends cdk.Stack {
     );
 
     // Create Aurora MySQL Global Database
-    const globalCluster = new rds.GlobalCluster(this, 'MysqlGlobalCluster', {
-      globalClusterIdentifier: 'mysql-global-cluster',
-      engine: rds.DatabaseClusterEngine.auroraMysql({
-        version: rds.AuroraMysqlEngineVersion.VER_3_04_0,
-      }),
-      defaultDatabaseName: databaseName,
-      // Removal policy for production should be RETAIN
-      removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
-    });
+    // Note: GlobalCluster L2 construct removed in newer CDK versions
+    // For initial deployment, using standard Aurora cluster
+    // To enable global database, use CfnGlobalCluster (L1 construct)
 
-    // Primary cluster (us-east-1 or your primary region)
+    // Primary cluster (us-east-2 or your primary region)
     const primaryCluster = new rds.DatabaseCluster(this, 'MysqlPrimaryCluster', {
+      clusterIdentifier: 'mysql-primary-cluster',
+      defaultDatabaseName: databaseName,
       engine: rds.DatabaseClusterEngine.auroraMysql({
         version: rds.AuroraMysqlEngineVersion.VER_3_04_0,
       }),
@@ -182,21 +178,11 @@ export class MysqlAuroraStack extends cdk.Stack {
       alarmName: `${this.stackName}-MySQL-HighReplicationLag`,
     });
 
-    // Associate primary cluster with global cluster
-    const cfnDbCluster = primaryCluster.node.defaultChild as rds.CfnDBCluster;
-    cfnDbCluster.globalClusterIdentifier = globalCluster.globalClusterIdentifier;
-
     // Outputs
     new cdk.CfnOutput(this, 'VpcId', {
       value: vpc.vpcId,
       description: 'VPC ID for MySQL Aurora',
       exportName: `${this.stackName}-VpcId`,
-    });
-
-    new cdk.CfnOutput(this, 'GlobalClusterIdentifier', {
-      value: globalCluster.globalClusterIdentifier!,
-      description: 'Global Cluster Identifier',
-      exportName: `${this.stackName}-GlobalClusterId`,
     });
 
     new cdk.CfnOutput(this, 'ClusterId', {

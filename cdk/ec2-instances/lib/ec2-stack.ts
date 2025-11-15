@@ -2,7 +2,10 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
+import * as path from 'path';
 
 export class Ec2Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -62,19 +65,40 @@ export class Ec2Stack extends cdk.Stack {
     }
     // Note: To connect via SSM, use: aws ssm start-session --target <instance-id>
 
-    // Allow HTTP access
+    // Allow Jenkins access (port 8080)
+    securityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(8080),
+      'Allow Jenkins access'
+    );
+
+    // Allow SonarQube access (port 9000)
+    securityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(9000),
+      'Allow SonarQube access'
+    );
+
+    // Allow MySQL access (port 3306)
+    securityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(3306),
+      'Allow MySQL access'
+    );
+
+    // Allow HTTP access for web dashboard (port 80)
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(80),
-      'Allow HTTP access'
+      'Allow HTTP access for web dashboard'
     );
 
-    // Allow HTTPS access
-    securityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(443),
-      'Allow HTTPS access'
-    );
+    // Create S3 bucket for installation scripts
+    const scriptsBucket = new s3.Bucket(this, 'ScriptsBucket', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+    });
 
     // Create IAM role for EC2 instances
     const role = new iam.Role(this, 'InstanceRole', {
@@ -85,56 +109,31 @@ export class Ec2Stack extends cdk.Stack {
       ],
     });
 
-    // User data script for instance initialization
+    // Grant read access to scripts bucket
+    scriptsBucket.grantRead(role);
+
+    // Deploy scripts to S3
+    const scriptsDir = path.join(__dirname, '..', 'scripts');
+    new s3deploy.BucketDeployment(this, 'DeployScripts', {
+      sources: [s3deploy.Source.asset(scriptsDir)],
+      destinationBucket: scriptsBucket,
+      destinationKeyPrefix: 'scripts/',
+    });
+
+    // Create user data to download and execute scripts from S3
     const userData = ec2.UserData.forLinux();
     userData.addCommands(
       '#!/bin/bash',
-      'set -e',  // Exit on error
+      'set -e',
       '',
-      '# Update system',
-      'yum update -y',
+      '# Download scripts from S3',
+      `aws s3 cp s3://${scriptsBucket.bucketName}/scripts/ /tmp/ --recursive --region ${this.region}`,
       '',
-      '# Install CloudWatch agent for monitoring',
-      'yum install -y amazon-cloudwatch-agent',
+      '# Make scripts executable',
+      'chmod +x /tmp/*.sh',
       '',
-      '# Install MySQL 5.7 client',
-      'sudo yum install -y https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm',
-      'sudo yum install -y mysql-community-client',
-      '',
-      '# Verify MySQL client installation',
-      'mysql --version > /tmp/mysql-version.txt',
-      '',
-      '# Install PostgreSQL client',
-      'sudo yum install -y postgresql15',
-      '',
-      '# Install and configure Apache',
-      'yum install -y httpd',
-      'systemctl start httpd',
-      'systemctl enable httpd',
-      '',
-      '# Create info page',
-      'cat > /var/www/html/index.html <<EOF',
-      '<html>',
-      '<head><title>EC2 Instance Info</title></head>',
-      '<body>',
-      '<h1>Hello from EC2 Instance: $(hostname -f)</h1>',
-      '<h2>Installed Database Clients:</h2>',
-      '<ul>',
-      '<li>MySQL Client: $(mysql --version 2>&1 | head -n1)</li>',
-      '<li>PostgreSQL Client: $(psql --version 2>&1)</li>',
-      '</ul>',
-      '<p>Instance ID: $(ec2-metadata --instance-id | cut -d " " -f 2)</p>',
-      '<p>Availability Zone: $(ec2-metadata --availability-zone | cut -d " " -f 2)</p>',
-      '</body>',
-      '</html>',
-      'EOF',
-      '',
-      '# Start CloudWatch agent',
-      'systemctl enable amazon-cloudwatch-agent',
-      'systemctl start amazon-cloudwatch-agent',
-      '',
-      '# Log completion',
-      'echo "User data script completed successfully at $(date)" >> /var/log/userdata.log'
+      '# Execute main orchestrator script',
+      '/tmp/userdata.sh'
     );
 
     // Parse instance type (e.g., "t3.micro" -> T3.MICRO)
@@ -176,7 +175,15 @@ export class Ec2Stack extends cdk.Stack {
 
     // CloudWatch Alarms for Instance 1
     new cloudwatch.Alarm(this, 'Instance1HighCPU', {
-      metric: instance1.metricCPUUtilization(),
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/EC2',
+        metricName: 'CPUUtilization',
+        dimensionsMap: {
+          InstanceId: instance1.instanceId,
+        },
+        statistic: 'Average',
+        period: cdk.Duration.minutes(5),
+      }),
       threshold: 80,
       evaluationPeriods: 2,
       datapointsToAlarm: 2,
@@ -185,7 +192,15 @@ export class Ec2Stack extends cdk.Stack {
     });
 
     new cloudwatch.Alarm(this, 'Instance1StatusCheckFailed', {
-      metric: instance1.metricStatusCheckFailed(),
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/EC2',
+        metricName: 'StatusCheckFailed',
+        dimensionsMap: {
+          InstanceId: instance1.instanceId,
+        },
+        statistic: 'Maximum',
+        period: cdk.Duration.minutes(1),
+      }),
       threshold: 1,
       evaluationPeriods: 2,
       datapointsToAlarm: 2,
@@ -195,7 +210,15 @@ export class Ec2Stack extends cdk.Stack {
 
     // CloudWatch Alarms for Instance 2
     new cloudwatch.Alarm(this, 'Instance2HighCPU', {
-      metric: instance2.metricCPUUtilization(),
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/EC2',
+        metricName: 'CPUUtilization',
+        dimensionsMap: {
+          InstanceId: instance2.instanceId,
+        },
+        statistic: 'Average',
+        period: cdk.Duration.minutes(5),
+      }),
       threshold: 80,
       evaluationPeriods: 2,
       datapointsToAlarm: 2,
@@ -204,7 +227,15 @@ export class Ec2Stack extends cdk.Stack {
     });
 
     new cloudwatch.Alarm(this, 'Instance2StatusCheckFailed', {
-      metric: instance2.metricStatusCheckFailed(),
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/EC2',
+        metricName: 'StatusCheckFailed',
+        dimensionsMap: {
+          InstanceId: instance2.instanceId,
+        },
+        statistic: 'Maximum',
+        period: cdk.Duration.minutes(1),
+      }),
       threshold: 1,
       evaluationPeriods: 2,
       datapointsToAlarm: 2,

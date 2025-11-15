@@ -76,7 +76,7 @@ export class PostgresAuroraStack extends cdk.Stack {
     // Create parameter group for PostgreSQL
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_15_4,
+        version: rds.AuroraPostgresEngineVersion.VER_15_3,
       }),
       description: 'Custom parameter group for PostgreSQL Aurora',
       parameters: {
@@ -95,20 +95,16 @@ export class PostgresAuroraStack extends cdk.Stack {
     );
 
     // Create Aurora PostgreSQL Global Database
-    const globalCluster = new rds.GlobalCluster(this, 'PostgresGlobalCluster', {
-      globalClusterIdentifier: 'postgres-global-cluster',
-      engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_15_4,
-      }),
-      defaultDatabaseName: databaseName,
-      // Removal policy for production should be RETAIN
-      removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
-    });
+    // Note: GlobalCluster L2 construct removed in newer CDK versions
+    // For initial deployment, using standard Aurora cluster
+    // To enable global database, use CfnGlobalCluster (L1 construct)
 
-    // Primary cluster (us-east-1 or your primary region)
+    // Primary cluster (us-east-2 or your primary region)
     const primaryCluster = new rds.DatabaseCluster(this, 'PostgresPrimaryCluster', {
+      clusterIdentifier: 'postgres-primary-cluster',
+      defaultDatabaseName: databaseName,
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_15_4,
+        version: rds.AuroraPostgresEngineVersion.VER_15_3,
       }),
       credentials: rds.Credentials.fromSecret(dbCredentials),
       vpc,
@@ -181,21 +177,11 @@ export class PostgresAuroraStack extends cdk.Stack {
       alarmName: `${this.stackName}-PostgreSQL-HighReplicationLag`,
     });
 
-    // Associate primary cluster with global cluster
-    const cfnDbCluster = primaryCluster.node.defaultChild as rds.CfnDBCluster;
-    cfnDbCluster.globalClusterIdentifier = globalCluster.globalClusterIdentifier;
-
     // Outputs
     new cdk.CfnOutput(this, 'VpcId', {
       value: vpc.vpcId,
       description: 'VPC ID for PostgreSQL Aurora',
       exportName: `${this.stackName}-VpcId`,
-    });
-
-    new cdk.CfnOutput(this, 'GlobalClusterIdentifier', {
-      value: globalCluster.globalClusterIdentifier!,
-      description: 'Global Cluster Identifier',
-      exportName: `${this.stackName}-GlobalClusterId`,
     });
 
     new cdk.CfnOutput(this, 'ClusterId', {
