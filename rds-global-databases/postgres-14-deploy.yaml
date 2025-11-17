@@ -1,0 +1,366 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'PostgreSQL 14 Global Database - Combined deployment with Primary (us-east-2) and Secondary (us-west-2)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    Description: Environment name
+
+  DBMasterUsername:
+    Type: String
+    Default: postgres
+    Description: Master username for the database
+    NoEcho: false
+
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Master password for the database (min 8 characters)
+
+  DBInstanceClass:
+    Type: String
+    Default: db.r5.large
+    Description: Database instance class
+    AllowedValues:
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r6g.large
+      - db.r6g.xlarge
+
+  EngineVersion:
+    Type: String
+    Default: '14.9'
+    Description: Aurora PostgreSQL 14 engine version
+
+Resources:
+  # ============================================
+  # PRIMARY REGION RESOURCES (us-east-2)
+  # ============================================
+
+  # VPC and Networking for Primary Region
+  PrimaryVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.2.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-vpc'
+
+  PrimarySubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PrimaryVPC
+      CidrBlock: 10.2.1.0/24
+      AvailabilityZone: us-east-2a
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-subnet-1'
+
+  PrimarySubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PrimaryVPC
+      CidrBlock: 10.2.2.0/24
+      AvailabilityZone: us-east-2b
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-subnet-2'
+
+  PrimarySubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PrimaryVPC
+      CidrBlock: 10.2.3.0/24
+      AvailabilityZone: us-east-2c
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-subnet-3'
+
+  PrimaryDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for PostgreSQL 14 primary cluster
+      SubnetIds:
+        - !Ref PrimarySubnet1
+        - !Ref PrimarySubnet2
+        - !Ref PrimarySubnet3
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-subnet-group'
+
+  PrimarySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for PostgreSQL 14 primary cluster
+      VpcId: !Ref PrimaryVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.2.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-sg'
+
+  # Global Database Cluster
+  GlobalCluster:
+    Type: AWS::RDS::GlobalCluster
+    Properties:
+      GlobalClusterIdentifier: !Sub '${Environment}-postgres14-global'
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      DatabaseName: mydb
+      StorageEncrypted: true
+
+  # Primary DB Cluster (us-east-2)
+  PrimaryDBCluster:
+    Type: AWS::RDS::DBCluster
+    DependsOn: GlobalCluster
+    Properties:
+      DBClusterIdentifier: !Sub '${Environment}-postgres14-primary-cluster'
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      DatabaseName: mydb
+      DBSubnetGroupName: !Ref PrimaryDBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref PrimarySecurityGroup
+      GlobalClusterIdentifier: !Ref GlobalCluster
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: '03:00-04:00'
+      PreferredMaintenanceWindow: 'sun:04:00-sun:05:00'
+      StorageEncrypted: true
+      EnableCloudwatchLogsExports:
+        - postgresql
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-cluster'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Primary DB Instances
+  PrimaryDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-postgres14-primary-instance-1'
+      DBClusterIdentifier: !Ref PrimaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-instance-1'
+        - Key: Environment
+          Value: !Ref Environment
+
+  PrimaryDBInstance2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-postgres14-primary-instance-2'
+      DBClusterIdentifier: !Ref PrimaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-primary-instance-2'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================
+  # SECONDARY REGION RESOURCES (us-west-2)
+  # ============================================
+
+  # VPC and Networking for Secondary Region
+  SecondaryVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.3.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-vpc'
+
+  SecondarySubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.3.1.0/24
+      AvailabilityZone: us-west-2a
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-subnet-1'
+
+  SecondarySubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.3.2.0/24
+      AvailabilityZone: us-west-2b
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-subnet-2'
+
+  SecondarySubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.3.3.0/24
+      AvailabilityZone: us-west-2c
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-subnet-3'
+
+  SecondaryDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for PostgreSQL 14 secondary cluster
+      SubnetIds:
+        - !Ref SecondarySubnet1
+        - !Ref SecondarySubnet2
+        - !Ref SecondarySubnet3
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-subnet-group'
+
+  SecondarySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for PostgreSQL 14 secondary cluster
+      VpcId: !Ref SecondaryVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.3.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-sg'
+
+  # Secondary DB Cluster (us-west-2)
+  SecondaryDBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub '${Environment}-postgres14-secondary-cluster'
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      DBSubnetGroupName: !Ref SecondaryDBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref SecondarySecurityGroup
+      GlobalClusterIdentifier: !Ref GlobalCluster
+      StorageEncrypted: true
+      EnableCloudwatchLogsExports:
+        - postgresql
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-cluster'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Secondary DB Instances
+  SecondaryDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-postgres14-secondary-instance-1'
+      DBClusterIdentifier: !Ref SecondaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-instance-1'
+        - Key: Environment
+          Value: !Ref Environment
+
+  SecondaryDBInstance2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-postgres14-secondary-instance-2'
+      DBClusterIdentifier: !Ref SecondaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-postgres14-secondary-instance-2'
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  # Global Cluster Outputs
+  GlobalClusterIdentifier:
+    Description: Global Cluster Identifier
+    Value: !Ref GlobalCluster
+    Export:
+      Name: !Sub '${Environment}-postgres14-global-cluster-id'
+
+  EngineVersion:
+    Description: PostgreSQL Engine Version
+    Value: !Ref EngineVersion
+    Export:
+      Name: !Sub '${Environment}-postgres14-engine-version'
+
+  # Primary Region Outputs
+  PrimaryClusterEndpoint:
+    Description: Primary cluster writer endpoint
+    Value: !GetAtt PrimaryDBCluster.Endpoint.Address
+    Export:
+      Name: !Sub '${Environment}-postgres14-primary-endpoint'
+
+  PrimaryClusterReadEndpoint:
+    Description: Primary cluster reader endpoint
+    Value: !GetAtt PrimaryDBCluster.ReadEndpoint.Address
+    Export:
+      Name: !Sub '${Environment}-postgres14-primary-read-endpoint'
+
+  PrimaryClusterIdentifier:
+    Description: Primary DB Cluster Identifier
+    Value: !Ref PrimaryDBCluster
+    Export:
+      Name: !Sub '${Environment}-postgres14-primary-cluster-id'
+
+  PrimaryVPCId:
+    Description: Primary VPC ID
+    Value: !Ref PrimaryVPC
+    Export:
+      Name: !Sub '${Environment}-postgres14-primary-vpc-id'
+
+  # Secondary Region Outputs
+  SecondaryClusterEndpoint:
+    Description: Secondary cluster writer endpoint
+    Value: !GetAtt SecondaryDBCluster.Endpoint.Address
+    Export:
+      Name: !Sub '${Environment}-postgres14-secondary-endpoint'
+
+  SecondaryClusterReadEndpoint:
+    Description: Secondary cluster reader endpoint
+    Value: !GetAtt SecondaryDBCluster.ReadEndpoint.Address
+    Export:
+      Name: !Sub '${Environment}-postgres14-secondary-read-endpoint'
+
+  SecondaryClusterIdentifier:
+    Description: Secondary DB Cluster Identifier
+    Value: !Ref SecondaryDBCluster
+    Export:
+      Name: !Sub '${Environment}-postgres14-secondary-cluster-id'
+
+  SecondaryVPCId:
+    Description: Secondary VPC ID
+    Value: !Ref SecondaryVPC
+    Export:
+      Name: !Sub '${Environment}-postgres14-secondary-vpc-id'
