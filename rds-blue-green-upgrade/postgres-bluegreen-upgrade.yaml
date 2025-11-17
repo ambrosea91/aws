@@ -1,0 +1,425 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Blue-Green Deployment automation for PostgreSQL 14 to 16 (latest) upgrade using Lambda and Step Functions'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    Description: Environment name
+
+  SourceClusterIdentifier:
+    Type: String
+    Description: Source DB Cluster Identifier (PostgreSQL 14)
+
+  TargetEngineVersion:
+    Type: String
+    Default: '16.1'
+    Description: Target Aurora PostgreSQL 16 engine version (latest)
+
+  BlueGreenDeploymentName:
+    Type: String
+    Default: postgres-14-to-16-upgrade
+    Description: Name for the blue-green deployment
+
+Resources:
+  # IAM Role for Lambda Functions
+  BlueGreenLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RDSBlueGreenPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:CreateBlueGreenDeployment
+                  - rds:DeleteBlueGreenDeployment
+                  - rds:DescribeBlueGreenDeployments
+                  - rds:SwitchoverBlueGreenDeployment
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                  - rds:ModifyDBCluster
+                  - rds:ModifyDBInstance
+                  - rds:ListTagsForResource
+                Resource: '*'
+
+  # Lambda Function to Create Blue-Green Deployment
+  CreateBlueGreenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Environment}-postgres-create-bluegreen'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt BlueGreenLambdaRole.Arn
+      Timeout: 300
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import os
+
+          rds = boto3.client('rds')
+
+          def lambda_handler(event, context):
+              try:
+                  source_cluster = event['sourceClusterIdentifier']
+                  target_version = event['targetEngineVersion']
+                  deployment_name = event['blueGreenDeploymentName']
+
+                  print(f"Creating blue-green deployment: {deployment_name}")
+                  print(f"Source cluster: {source_cluster}")
+                  print(f"Target version: {target_version}")
+
+                  response = rds.create_blue_green_deployment(
+                      BlueGreenDeploymentName=deployment_name,
+                      Source=f"arn:aws:rds:{os.environ['AWS_REGION']}:{context.invoked_function_arn.split(':')[4]}:cluster:{source_cluster}",
+                      TargetEngineVersion=target_version,
+                      Tags=[
+                          {
+                              'Key': 'Environment',
+                              'Value': os.environ['ENVIRONMENT']
+                          },
+                          {
+                              'Key': 'Purpose',
+                              'Value': 'PostgreSQL14to16Upgrade'
+                          }
+                      ]
+                  )
+
+                  deployment_id = response['BlueGreenDeployment']['BlueGreenDeploymentIdentifier']
+
+                  return {
+                      'statusCode': 200,
+                      'deploymentId': deployment_id,
+                      'deploymentName': deployment_name,
+                      'status': response['BlueGreenDeployment']['Status']
+                  }
+
+              except Exception as e:
+                  print(f"Error creating blue-green deployment: {str(e)}")
+                  raise
+
+  # Lambda Function to Check Blue-Green Deployment Status
+  CheckBlueGreenStatusFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Environment}-postgres-check-bluegreen-status'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt BlueGreenLambdaRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          rds = boto3.client('rds')
+
+          def lambda_handler(event, context):
+              try:
+                  deployment_id = event['deploymentId']
+
+                  response = rds.describe_blue_green_deployments(
+                      BlueGreenDeploymentIdentifier=deployment_id
+                  )
+
+                  if not response['BlueGreenDeployments']:
+                      raise Exception(f"Blue-green deployment {deployment_id} not found")
+
+                  deployment = response['BlueGreenDeployments'][0]
+                  status = deployment['Status']
+
+                  print(f"Deployment {deployment_id} status: {status}")
+
+                  return {
+                      'statusCode': 200,
+                      'deploymentId': deployment_id,
+                      'status': status,
+                      'isComplete': status == 'AVAILABLE',
+                      'isFailed': status in ['INVALID_CONFIGURATION', 'DELETING', 'DELETED']
+                  }
+
+              except Exception as e:
+                  print(f"Error checking deployment status: {str(e)}")
+                  raise
+
+  # Lambda Function to Switchover Blue-Green Deployment
+  SwitchoverBlueGreenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Environment}-postgres-switchover-bluegreen'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt BlueGreenLambdaRole.Arn
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          rds = boto3.client('rds')
+
+          def lambda_handler(event, context):
+              try:
+                  deployment_id = event['deploymentId']
+                  switchover_timeout = event.get('switchoverTimeout', 300)
+
+                  print(f"Initiating switchover for deployment: {deployment_id}")
+
+                  response = rds.switchover_blue_green_deployment(
+                      BlueGreenDeploymentIdentifier=deployment_id,
+                      SwitchoverTimeout=switchover_timeout
+                  )
+
+                  deployment = response['BlueGreenDeployment']
+
+                  return {
+                      'statusCode': 200,
+                      'deploymentId': deployment_id,
+                      'status': deployment['Status']
+                  }
+
+              except Exception as e:
+                  print(f"Error during switchover: {str(e)}")
+                  raise
+
+  # Lambda Function to Delete Blue-Green Deployment
+  DeleteBlueGreenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Environment}-postgres-delete-bluegreen'
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt BlueGreenLambdaRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          rds = boto3.client('rds')
+
+          def lambda_handler(event, context):
+              try:
+                  deployment_id = event['deploymentId']
+                  delete_target = event.get('deleteTarget', True)
+
+                  print(f"Deleting blue-green deployment: {deployment_id}")
+
+                  response = rds.delete_blue_green_deployment(
+                      BlueGreenDeploymentIdentifier=deployment_id,
+                      DeleteTarget=delete_target
+                  )
+
+                  deployment = response['BlueGreenDeployment']
+
+                  return {
+                      'statusCode': 200,
+                      'deploymentId': deployment_id,
+                      'status': deployment['Status']
+                  }
+
+              except Exception as e:
+                  print(f"Error deleting deployment: {str(e)}")
+                  raise
+
+  # SNS Topic for Notifications
+  BlueGreenNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${Environment}-postgres-bluegreen-notifications'
+      DisplayName: PostgreSQL Blue-Green Deployment Notifications
+
+  # IAM Role for Step Functions
+  StepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt CreateBlueGreenFunction.Arn
+                  - !GetAtt CheckBlueGreenStatusFunction.Arn
+                  - !GetAtt SwitchoverBlueGreenFunction.Arn
+                  - !GetAtt DeleteBlueGreenFunction.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref BlueGreenNotificationTopic
+
+  # Step Functions State Machine
+  BlueGreenStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${Environment}-postgres-bluegreen-upgrade'
+      RoleArn: !GetAtt StepFunctionsRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "PostgreSQL 14 to 16 Blue-Green Upgrade",
+          "StartAt": "CreateBlueGreenDeployment",
+          "States": {
+            "CreateBlueGreenDeployment": {
+              "Type": "Task",
+              "Resource": "${CreateBlueGreenFunction.Arn}",
+              "Next": "WaitForDeploymentReady",
+              "ResultPath": "$.deployment",
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "Next": "NotifyFailure",
+                  "ResultPath": "$.error"
+                }
+              ]
+            },
+            "WaitForDeploymentReady": {
+              "Type": "Wait",
+              "Seconds": 60,
+              "Next": "CheckDeploymentStatus"
+            },
+            "CheckDeploymentStatus": {
+              "Type": "Task",
+              "Resource": "${CheckBlueGreenStatusFunction.Arn}",
+              "Next": "IsDeploymentReady",
+              "InputPath": "$.deployment",
+              "ResultPath": "$.statusCheck"
+            },
+            "IsDeploymentReady": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.statusCheck.isComplete",
+                  "BooleanEquals": true,
+                  "Next": "NotifyReadyForSwitchover"
+                },
+                {
+                  "Variable": "$.statusCheck.isFailed",
+                  "BooleanEquals": true,
+                  "Next": "NotifyFailure"
+                }
+              ],
+              "Default": "WaitForDeploymentReady"
+            },
+            "NotifyReadyForSwitchover": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn": "${BlueGreenNotificationTopic}",
+                "Subject": "PostgreSQL Blue-Green Deployment Ready",
+                "Message.$": "States.Format('Blue-Green deployment {} is ready for switchover. Green environment is available for testing.', $.deployment.deploymentId)"
+              },
+              "Next": "WaitForManualApproval"
+            },
+            "WaitForManualApproval": {
+              "Type": "Wait",
+              "Seconds": 3600,
+              "Comment": "Wait for manual testing and approval (1 hour default)",
+              "Next": "PerformSwitchover"
+            },
+            "PerformSwitchover": {
+              "Type": "Task",
+              "Resource": "${SwitchoverBlueGreenFunction.Arn}",
+              "InputPath": "$.deployment",
+              "ResultPath": "$.switchover",
+              "Next": "WaitAfterSwitchover",
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "Next": "NotifyFailure",
+                  "ResultPath": "$.error"
+                }
+              ]
+            },
+            "WaitAfterSwitchover": {
+              "Type": "Wait",
+              "Seconds": 300,
+              "Next": "NotifySuccess"
+            },
+            "NotifySuccess": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn": "${BlueGreenNotificationTopic}",
+                "Subject": "PostgreSQL Blue-Green Switchover Completed",
+                "Message.$": "States.Format('Blue-Green deployment {} switchover completed successfully. PostgreSQL upgraded to 16.', $.deployment.deploymentId)"
+              },
+              "End": true
+            },
+            "NotifyFailure": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn": "${BlueGreenNotificationTopic}",
+                "Subject": "PostgreSQL Blue-Green Deployment Failed",
+                "Message.$": "States.Format('Blue-Green deployment failed. Error: {}', $.error)"
+              },
+              "Next": "FailState"
+            },
+            "FailState": {
+              "Type": "Fail",
+              "Error": "BlueGreenDeploymentFailed",
+              "Cause": "The blue-green deployment process failed"
+            }
+          }
+        }
+
+Outputs:
+  CreateBlueGreenFunctionArn:
+    Description: ARN of the Create Blue-Green Lambda Function
+    Value: !GetAtt CreateBlueGreenFunction.Arn
+
+  SwitchoverBlueGreenFunctionArn:
+    Description: ARN of the Switchover Blue-Green Lambda Function
+    Value: !GetAtt SwitchoverBlueGreenFunction.Arn
+
+  StateMachineArn:
+    Description: ARN of the Step Functions State Machine
+    Value: !Ref BlueGreenStateMachine
+
+  NotificationTopicArn:
+    Description: ARN of the SNS Topic for notifications
+    Value: !Ref BlueGreenNotificationTopic
