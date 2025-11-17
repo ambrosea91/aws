@@ -26,19 +26,34 @@ Complete Infrastructure-as-Code solution for deploying and managing AWS RDS Auro
 ├── rds-global-databases/
 │   ├── mysql-57-deploy.yaml           # MySQL 5.7 (primary + secondary)
 │   └── postgres-14-deploy.yaml        # PostgreSQL 14 (primary + secondary)
-└── rds-blue-green-upgrade/
-    ├── mysql-bluegreen-upgrade.yaml   # MySQL upgrade automation
-    └── postgres-bluegreen-upgrade.yaml # PostgreSQL upgrade automation
+├── rds-blue-green-upgrade/
+│   ├── mysql-bluegreen-upgrade.yaml   # MySQL upgrade automation
+│   └── postgres-bluegreen-upgrade.yaml # PostgreSQL upgrade automation
+├── github-oidc-setup.yaml              # OIDC provider setup (one-time)
+├── update-account-id.sh                # Helper script to update workflows
+├── SETUP-GITHUB-OIDC.md                # OIDC setup instructions
+└── README.md                           # This file
 ```
 
 ## 🚀 Quick Start
 
+### ⚠️ IMPORTANT: First-Time Setup Required
+
+**Before deploying databases, you MUST set up GitHub OIDC authentication:**
+
+1. **Follow the OIDC Setup Guide**: See [SETUP-GITHUB-OIDC.md](SETUP-GITHUB-OIDC.md)
+2. **Deploy the OIDC CloudFormation stack** (one-time setup)
+3. **Update workflow files** with your AWS Account ID
+
+This only needs to be done once per AWS account.
+
 ### Prerequisites
 
-1. **AWS Account** with appropriate permissions
-2. **GitHub Repository** with OIDC configured for AWS
-3. **IAM Role**: `arn:aws:iam::390844768648:role/GitHubActionsOIDCRole`
-4. **Regions**: us-east-2 (primary), us-west-2 (secondary)
+1. **AWS Account** with administrator access
+2. **AWS CLI** installed and configured
+3. **GitHub Repository** with OIDC configured (see setup guide above)
+4. **IAM Role** for GitHub Actions (created by setup guide)
+5. **Regions**: us-east-2 (primary), us-west-2 (secondary)
 
 ### Option 1: Deploy Using GitHub Actions (Recommended)
 
