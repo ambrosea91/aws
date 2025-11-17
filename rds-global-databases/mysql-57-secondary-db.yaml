@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'MySQL 5.7 Global Database Secondary Region (us-west-2)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    Description: Environment name
+
+  GlobalClusterIdentifier:
+    Type: String
+    Description: Global Cluster Identifier from primary region
+
+  DBInstanceClass:
+    Type: String
+    Default: db.r5.large
+    Description: Database instance class
+    AllowedValues:
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r6g.large
+      - db.r6g.xlarge
+
+  EngineVersion:
+    Type: String
+    Default: '5.7.mysql_aurora.2.11.3'
+    Description: Aurora MySQL 5.7 engine version
+
+Resources:
+  # VPC and Networking for Secondary Region (us-west-2)
+  SecondaryVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-vpc'
+
+  SecondarySubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: us-west-2a
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-subnet-1'
+
+  SecondarySubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.1.2.0/24
+      AvailabilityZone: us-west-2b
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-subnet-2'
+
+  SecondarySubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SecondaryVPC
+      CidrBlock: 10.1.3.0/24
+      AvailabilityZone: us-west-2c
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-subnet-3'
+
+  SecondaryDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for MySQL 5.7 secondary cluster
+      SubnetIds:
+        - !Ref SecondarySubnet1
+        - !Ref SecondarySubnet2
+        - !Ref SecondarySubnet3
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-subnet-group'
+
+  SecondarySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for MySQL 5.7 secondary cluster
+      VpcId: !Ref SecondaryVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.1.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-sg'
+
+  # Secondary DB Cluster (us-west-2)
+  SecondaryDBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub '${Environment}-mysql57-secondary-cluster'
+      Engine: aurora-mysql
+      EngineVersion: !Ref EngineVersion
+      DBSubnetGroupName: !Ref SecondaryDBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref SecondarySecurityGroup
+      GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
+      StorageEncrypted: true
+      EnableCloudwatchLogsExports:
+        - error
+        - general
+        - slowquery
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-cluster'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Secondary DB Instances
+  SecondaryDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-mysql57-secondary-instance-1'
+      DBClusterIdentifier: !Ref SecondaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-instance-1'
+        - Key: Environment
+          Value: !Ref Environment
+
+  SecondaryDBInstance2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${Environment}-mysql57-secondary-instance-2'
+      DBClusterIdentifier: !Ref SecondaryDBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      EngineVersion: !Ref EngineVersion
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-mysql57-secondary-instance-2'
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  SecondaryClusterEndpoint:
+    Description: Secondary cluster writer endpoint
+    Value: !GetAtt SecondaryDBCluster.Endpoint.Address
+    Export:
+      Name: !Sub '${Environment}-mysql57-secondary-endpoint'
+
+  SecondaryClusterReadEndpoint:
+    Description: Secondary cluster reader endpoint
+    Value: !GetAtt SecondaryDBCluster.ReadEndpoint.Address
+    Export:
+      Name: !Sub '${Environment}-mysql57-secondary-read-endpoint'
+
+  SecondaryClusterIdentifier:
+    Description: Secondary DB Cluster Identifier
+    Value: !Ref SecondaryDBCluster
+    Export:
+      Name: !Sub '${Environment}-mysql57-secondary-cluster-id'
+
+  SecondaryVPCId:
+    Description: Secondary VPC ID
+    Value: !Ref SecondaryVPC
+    Export:
+      Name: !Sub '${Environment}-mysql57-secondary-vpc-id'
