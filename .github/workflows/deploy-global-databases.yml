@@ -45,23 +45,62 @@ jobs:
           role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
           aws-region: us-east-2
 
-      - name: Deploy MySQL 5.7 Global Database (Primary + Secondary)
+      - name: Deploy MySQL 5.7 Primary Region (us-east-2)
         run: |
           aws cloudformation deploy \
-            --template-file rds-global-databases/mysql-57-deploy.yaml \
-            --stack-name ${{ github.event.inputs.environment }}-mysql57-global \
+            --template-file rds-global-databases/mysql-57-primary.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-primary \
             --parameter-overrides \
               Environment=${{ github.event.inputs.environment }} \
               DBMasterPassword=${{ github.event.inputs.db_password }} \
             --capabilities CAPABILITY_IAM \
             --region us-east-2
 
+      - name: Get Global Cluster ID
+        id: get-global-cluster
+        run: |
+          GLOBAL_CLUSTER_ID=$(aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-primary \
+            --region us-east-2 \
+            --query 'Stacks[0].Outputs[?OutputKey==`GlobalClusterIdentifier`].OutputValue' \
+            --output text)
+          echo "global_cluster_id=$GLOBAL_CLUSTER_ID" >> $GITHUB_OUTPUT
+          echo "Global Cluster ID: $GLOBAL_CLUSTER_ID"
+
+      - name: Configure AWS credentials for Secondary Region (us-west-2)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
+          aws-region: us-west-2
+
+      - name: Deploy MySQL 5.7 Secondary Region (us-west-2)
+        run: |
+          aws cloudformation deploy \
+            --template-file rds-global-databases/mysql-57-secondary.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-secondary \
+            --parameter-overrides \
+              Environment=${{ github.event.inputs.environment }} \
+              GlobalClusterIdentifier=${{ steps.get-global-cluster.outputs.global_cluster_id }} \
+            --capabilities CAPABILITY_IAM \
+            --region us-west-2
+
       - name: Get Deployment Outputs
         run: |
-          echo "Getting MySQL Deployment Outputs..."
+          echo "==================================="
+          echo "MySQL 5.7 Global Database Deployed"
+          echo "==================================="
+          echo ""
+          echo "PRIMARY REGION (us-east-2):"
           aws cloudformation describe-stacks \
-            --stack-name ${{ github.event.inputs.environment }}-mysql57-global \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-primary \
             --region us-east-2 \
+            --query 'Stacks[0].Outputs' \
+            --output table
+          echo ""
+          echo "SECONDARY REGION (us-west-2):"
+          aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-secondary \
+            --region us-west-2 \
             --query 'Stacks[0].Outputs' \
             --output table
 
