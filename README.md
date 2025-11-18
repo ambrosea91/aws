@@ -35,10 +35,222 @@ Complete Infrastructure-as-Code solution for deploying and managing AWS RDS Auro
 
 ### Prerequisites
 
-1. **AWS Account** with appropriate permissions
+1. **AWS Account** with appropriate permissions (Account ID: 906266478329)
 2. **GitHub Repository** with OIDC configured for AWS
 3. **IAM Role**: `arn:aws:iam::906266478329:role/GitHubActionsOIDCRole`
 4. **Regions**: us-east-2 (primary), us-west-2 (secondary)
+
+---
+
+## 🔐 OIDC Setup Guide for AWS Account 906266478329
+
+**⚠️ First-Time Setup Required:** Before you can deploy using GitHub Actions, you must configure OIDC authentication between GitHub and AWS. Follow this guide once to set up the connection.
+
+### PART 1: Create OIDC Identity Provider (5 minutes)
+
+#### Step 1.1: Navigate to IAM
+1. Open your browser and go to: https://console.aws.amazon.com/iam/
+2. Sign in to AWS account **906266478329**
+3. You should see the IAM Dashboard
+
+#### Step 1.2: Go to Identity Providers
+1. Look at the left sidebar
+2. Click on **"Identity providers"** (under "Access management")
+3. You'll see a page listing identity providers (probably empty)
+
+#### Step 1.3: Add New Provider
+1. Click the orange **"Add provider"** button (top right)
+2. A form will appear
+
+#### Step 1.4: Configure OpenID Connect Provider
+Fill in these fields:
+
+**Provider type:**
+- Select **"OpenID Connect"** (should be selected by default)
+
+**Provider URL:**
+- Enter exactly: `https://token.actions.githubusercontent.com`
+- Press Tab or click outside the field (AWS will validate automatically)
+
+**Thumbprints:**
+- If empty, manually add: `6938fd4d98bab03faadb97b34396831e3780aea1`
+- (AWS may auto-populate this)
+
+**Audience:**
+- Click **"Add audience"**
+- Enter exactly: `sts.amazonaws.com`
+
+#### Step 1.5: Add Tags (Optional)
+- You can skip this or add:
+  - Key: `Name`, Value: `GitHubActions`
+  - Key: `Purpose`, Value: `OIDC`
+
+#### Step 1.6: Create Provider
+1. Click the **"Add provider"** button at the bottom
+2. You should see a success message
+3. You'll see your new provider listed as `token.actions.githubusercontent.com`
+
+✅ **PART 1 COMPLETE!** The OIDC provider is now created.
+
+---
+
+### PART 2: Create IAM Role (10 minutes)
+
+#### Step 2.1: Navigate to Roles
+1. In the left sidebar of IAM, click **"Roles"**
+2. You'll see a list of existing roles
+
+#### Step 2.2: Start Creating Role
+1. Click the orange **"Create role"** button (top right)
+2. You'll see "Select trusted entity" page
+
+#### Step 2.3: Select Trusted Entity Type
+1. Select **"Web identity"**
+2. You'll see a form appear below
+
+#### Step 2.4: Configure Web Identity
+Fill in these fields:
+
+**Identity provider:**
+- From dropdown, select: `token.actions.githubusercontent.com`
+
+**Audience:**
+- From dropdown, select: `sts.amazonaws.com`
+
+**GitHub organization:**
+- Enter: `ambrosea9`
+
+**GitHub repository:** (if this field appears)
+- Enter: `aws`
+
+#### Step 2.5: Click Next
+- Click the **"Next"** button at the bottom
+
+#### Step 2.6: Add Permissions Policies
+Now you need to attach AWS managed policies. In the search box, search for and **select** (check the box) for each of these:
+
+1. Search: `AWSCloudFormationFullAccess` → Check the box ✓
+2. Search: `AmazonRDSFullAccess` → Check the box ✓
+3. Search: `AmazonVPCFullAccess` → Check the box ✓
+4. Search: `AWSLambda_FullAccess` → Check the box ✓
+5. Search: `AWSStepFunctionsFullAccess` → Check the box ✓
+6. Search: `AmazonSNSFullAccess` → Check the box ✓
+7. Search: `CloudWatchLogsFullAccess` → Check the box ✓
+8. Search: `IAMFullAccess` → Check the box ✓
+
+You should have **8 policies selected** (you'll see them listed at the top)
+
+#### Step 2.7: Click Next
+- Click **"Next"** at the bottom
+
+#### Step 2.8: Name and Review
+Fill in these fields:
+
+**Role name:**
+- Enter exactly: `GitHubActionsOIDCRole`
+
+**Description:**
+- Enter: `IAM role for GitHub Actions to deploy AWS resources via OIDC`
+
+**Max session duration:**
+- Leave as default (1 hour)
+
+#### Step 2.9: Create Role
+1. Scroll down and click **"Create role"** button
+2. You should see a success message
+3. You'll be back at the Roles list
+
+✅ **PART 2 COMPLETE!** The role is created, but we need to edit the trust policy.
+
+---
+
+### PART 3: Edit Trust Policy (CRITICAL STEP - 5 minutes)
+
+#### Step 3.1: Find Your Role
+1. In the Roles search box, type: `GitHubActionsOIDCRole`
+2. Click on the role name **"GitHubActionsOIDCRole"** in the list
+3. You'll see the role summary page
+
+#### Step 3.2: Go to Trust Relationships
+1. Click the **"Trust relationships"** tab (near the top)
+2. You'll see the current trust policy in JSON format
+
+#### Step 3.3: Edit Trust Policy
+1. Click the **"Edit trust policy"** button
+2. You'll see a JSON editor
+
+#### Step 3.4: Replace the Trust Policy
+1. **DELETE** all the existing JSON in the editor
+2. **COPY** this entire JSON policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::906266478329:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:ambrosea9/aws:*"
+        }
+      }
+    }
+  ]
+}
+```
+
+3. **PASTE** it into the editor (replacing everything)
+
+#### Step 3.5: Update Policy
+1. Click **"Update policy"** button at the bottom
+2. You should see a success message
+3. The trust policy is now configured correctly
+
+✅ **PART 3 COMPLETE!** Your role now trusts only your GitHub repository.
+
+---
+
+### PART 4: Verify Setup (2 minutes)
+
+#### Step 4.1: Check Role ARN
+1. You should still be on the `GitHubActionsOIDCRole` page
+2. Near the top, you'll see **"ARN"**
+3. Copy the ARN - it should be: `arn:aws:iam::906266478329:role/GitHubActionsOIDCRole`
+
+#### Step 4.2: Verify OIDC Provider
+1. Go back to **Identity providers** in the left sidebar
+2. You should see `token.actions.githubusercontent.com` listed
+3. Click on it
+4. Verify the ARN is: `arn:aws:iam::906266478329:oidc-provider/token.actions.githubusercontent.com`
+
+✅ **ALL DONE!** Your GitHub Actions should now be able to authenticate to AWS.
+
+---
+
+### PART 5: Test the Setup
+
+#### Step 5.1: Try Your Deployment
+1. Go to your GitHub repository: https://github.com/ambrosea9/aws
+2. Click on **Actions** tab
+3. Select **"Deploy RDS Global Databases"** workflow
+4. Click **"Run workflow"**
+5. Fill in the parameters and run it
+
+#### Step 5.2: Monitor
+- Watch the workflow run
+- The "Configure AWS credentials" step should now succeed
+- You should no longer see the OIDC error
+
+---
+
+## 🚀 Deployment Instructions
 
 ### Option 1: Deploy Using GitHub Actions (Recommended)
 
