@@ -37,7 +37,7 @@ Complete Infrastructure-as-Code solution for deploying and managing AWS RDS Auro
 
 1. **AWS Account** with appropriate permissions
 2. **GitHub Repository** with OIDC configured for AWS
-3. **IAM Role**: `arn:aws:iam::390844768648:role/GitHubActionsOIDCRole`
+3. **IAM Role**: `arn:aws:iam::906266478329:role/GitHubActionsOIDCRole`
 4. **Regions**: us-east-2 (primary), us-west-2 (secondary)
 
 ### Option 1: Deploy Using GitHub Actions (Recommended)

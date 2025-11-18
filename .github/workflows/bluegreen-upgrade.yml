@@ -131,7 +131,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
           aws-region: ${{ github.event.inputs.region }}
 
       - name: Validate Input
@@ -180,7 +180,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
           aws-region: ${{ github.event.inputs.region }}
 
       - name: Validate Input
@@ -229,7 +229,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
           aws-region: ${{ github.event.inputs.region }}
 
       - name: Validate Input
@@ -264,7 +264,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          role-to-assume: arn:aws:iam::906266478329:role/GitHubActionsOIDCRole
           aws-region: ${{ github.event.inputs.region }}
 
       - name: Validate Input
