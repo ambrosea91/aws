@@ -113,8 +113,6 @@ Resources:
     Properties:
       GlobalClusterIdentifier: !Sub '${Environment}-mysql57-global'
       Engine: aurora-mysql
-      EngineVersion: !Ref EngineVersion
-      DatabaseName: mydb
       StorageEncrypted: true
 
   # Primary DB Cluster

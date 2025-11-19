@@ -113,8 +113,6 @@ Resources:
     Properties:
       GlobalClusterIdentifier: !Sub '${Environment}-postgres14-global'
       Engine: aurora-postgresql
-      EngineVersion: !Ref EngineVersion
-      DatabaseName: mydb
       StorageEncrypted: true
 
   # Primary DB Cluster
