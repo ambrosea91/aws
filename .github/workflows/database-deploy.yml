@@ -1,14 +1,21 @@
 # .github/workflows/database-deploy.yml
 
-name: Terraform Deploy
+name: Terraform Deploy (DISABLED - Use CloudFormation workflows instead)
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - '**.tf'
-      - '.github/workflows/database-deploy.yml'
+  workflow_dispatch:  # Changed to manual trigger only
+    inputs:
+      confirm:
+        description: 'This workflow is deprecated. Use deploy-global-databases.yml instead'
+        required: true
+        type: boolean
+  # Disabled automatic triggers
+  # push:
+  #   branches:
+  #     - develop
+  #   paths:
+  #     - '**.tf'
+  #     - '.github/workflows/database-deploy.yml'
 
 jobs:
   deploy:

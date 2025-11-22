@@ -1,6 +1,6 @@
 # .github/workflows/database-destroy.yml
 
-name: Terraform Destroy
+name: Terraform Destroy (DEPRECATED - Use CloudFormation workflows instead)
 
 on:
   workflow_dispatch:

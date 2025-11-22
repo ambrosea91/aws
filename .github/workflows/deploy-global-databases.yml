@@ -1,0 +1,206 @@
+name: Deploy RDS Global Databases
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+      database_type:
+        description: 'Database type to deploy'
+        required: true
+        type: choice
+        options:
+          - mysql-57
+          - postgres-14
+          - both
+      db_password:
+        description: 'Database master password (min 8 characters)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-mysql-primary:
+    name: Deploy MySQL 5.7 Primary (us-east-2)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.database_type == 'mysql-57' || github.event.inputs.database_type == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials for us-east-2
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          aws-region: us-east-2
+
+      - name: Deploy MySQL 5.7 Primary Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file rds-global-databases/mysql-57-global-db.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-primary \
+            --parameter-overrides \
+              Environment=${{ github.event.inputs.environment }} \
+              DBMasterPassword=${{ github.event.inputs.db_password }} \
+            --capabilities CAPABILITY_IAM \
+            --region us-east-2
+
+      - name: Get Global Cluster Identifier
+        id: get-global-cluster
+        run: |
+          GLOBAL_CLUSTER_ID=$(aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-primary \
+            --region us-east-2 \
+            --query 'Stacks[0].Outputs[?OutputKey==`GlobalClusterIdentifier`].OutputValue' \
+            --output text)
+          echo "global_cluster_id=$GLOBAL_CLUSTER_ID" >> $GITHUB_OUTPUT
+          echo "MySQL Global Cluster ID: $GLOBAL_CLUSTER_ID"
+
+    outputs:
+      mysql_global_cluster_id: ${{ steps.get-global-cluster.outputs.global_cluster_id }}
+
+  deploy-mysql-secondary:
+    name: Deploy MySQL 5.7 Secondary (us-west-2)
+    runs-on: ubuntu-latest
+    needs: deploy-mysql-primary
+    if: ${{ github.event.inputs.database_type == 'mysql-57' || github.event.inputs.database_type == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials for us-west-2
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          aws-region: us-west-2
+
+      - name: Deploy MySQL 5.7 Secondary Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file rds-global-databases/mysql-57-secondary-db.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-secondary \
+            --parameter-overrides \
+              Environment=${{ github.event.inputs.environment }} \
+              GlobalClusterIdentifier=${{ needs.deploy-mysql-primary.outputs.mysql_global_cluster_id }} \
+            --capabilities CAPABILITY_IAM \
+            --region us-west-2
+
+      - name: Get Secondary Cluster Endpoint
+        run: |
+          SECONDARY_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-mysql57-secondary \
+            --region us-west-2 \
+            --query 'Stacks[0].Outputs[?OutputKey==`SecondaryClusterEndpoint`].OutputValue' \
+            --output text)
+          echo "MySQL Secondary Endpoint: $SECONDARY_ENDPOINT"
+
+  deploy-postgres-primary:
+    name: Deploy PostgreSQL 14 Primary (us-east-2)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.database_type == 'postgres-14' || github.event.inputs.database_type == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials for us-east-2
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          aws-region: us-east-2
+
+      - name: Deploy PostgreSQL 14 Primary Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file rds-global-databases/postgres-14-global-db.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-postgres14-primary \
+            --parameter-overrides \
+              Environment=${{ github.event.inputs.environment }} \
+              DBMasterPassword=${{ github.event.inputs.db_password }} \
+            --capabilities CAPABILITY_IAM \
+            --region us-east-2
+
+      - name: Get Global Cluster Identifier
+        id: get-global-cluster
+        run: |
+          GLOBAL_CLUSTER_ID=$(aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-postgres14-primary \
+            --region us-east-2 \
+            --query 'Stacks[0].Outputs[?OutputKey==`GlobalClusterIdentifier`].OutputValue' \
+            --output text)
+          echo "global_cluster_id=$GLOBAL_CLUSTER_ID" >> $GITHUB_OUTPUT
+          echo "PostgreSQL Global Cluster ID: $GLOBAL_CLUSTER_ID"
+
+    outputs:
+      postgres_global_cluster_id: ${{ steps.get-global-cluster.outputs.global_cluster_id }}
+
+  deploy-postgres-secondary:
+    name: Deploy PostgreSQL 14 Secondary (us-west-2)
+    runs-on: ubuntu-latest
+    needs: deploy-postgres-primary
+    if: ${{ github.event.inputs.database_type == 'postgres-14' || github.event.inputs.database_type == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials for us-west-2
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::390844768648:role/GitHubActionsOIDCRole
+          aws-region: us-west-2
+
+      - name: Deploy PostgreSQL 14 Secondary Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file rds-global-databases/postgres-14-secondary-db.yaml \
+            --stack-name ${{ github.event.inputs.environment }}-postgres14-secondary \
+            --parameter-overrides \
+              Environment=${{ github.event.inputs.environment }} \
+              GlobalClusterIdentifier=${{ needs.deploy-postgres-primary.outputs.postgres_global_cluster_id }} \
+            --capabilities CAPABILITY_IAM \
+            --region us-west-2
+
+      - name: Get Secondary Cluster Endpoint
+        run: |
+          SECONDARY_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name ${{ github.event.inputs.environment }}-postgres14-secondary \
+            --region us-west-2 \
+            --query 'Stacks[0].Outputs[?OutputKey==`SecondaryClusterEndpoint`].OutputValue' \
+            --output text)
+          echo "PostgreSQL Secondary Endpoint: $SECONDARY_ENDPOINT"
+
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy-mysql-secondary, deploy-postgres-secondary]
+    if: always()
+
+    steps:
+      - name: Print Deployment Summary
+        run: |
+          echo "================================"
+          echo "RDS Global Database Deployment Complete"
+          echo "================================"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Database Type: ${{ github.event.inputs.database_type }}"
+          echo ""
+          echo "Primary Region: us-east-2"
+          echo "Secondary Region: us-west-2"
+          echo ""
+          echo "Next Steps:"
+          echo "1. Verify database connectivity in both regions"
+          echo "2. Test replication between primary and secondary"
+          echo "3. When ready, use the blue-green deployment workflow to upgrade"
