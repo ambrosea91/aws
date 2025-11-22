@@ -132,12 +132,12 @@ output "connection_details" {
 # Secrets Manager Outputs
 output "secrets_manager_secret_arn" {
   description = "ARN of the Secrets Manager secret containing database credentials"
-  value       = var.use_secrets_manager ? aws_secretsmanager_secret.db_password[0].arn : null
+  value       = aws_secretsmanager_secret.db_password.arn
 }
 
 output "secrets_manager_secret_name" {
   description = "Name of the Secrets Manager secret containing database credentials"
-  value       = var.use_secrets_manager ? aws_secretsmanager_secret.db_password[0].name : null
+  value       = aws_secretsmanager_secret.db_password.name
 }
 
 # Resource Group Outputs

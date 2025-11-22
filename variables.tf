@@ -51,7 +51,7 @@ variable "vpc_cidr" {
 variable "availability_zones" {
   description = "List of availability zones"
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
+  default     = ["us-east-2a", "us-east-2b"]
 }
 
 variable "public_subnet_cidrs" {
@@ -167,17 +167,8 @@ variable "master_username" {
   default     = "postgres"
 }
 
-variable "db_password" {
-  description = "Master password for the database (should be set via environment variable or tfvars)"
-  type        = string
-  sensitive   = true
-}
-
-variable "use_secrets_manager" {
-  description = "Store database password in AWS Secrets Manager (recommended for production)"
-  type        = bool
-  default     = false
-}
+# Note: Database password is auto-generated using random_password resource
+# and stored in AWS Secrets Manager automatically
 
 variable "secret_recovery_window_days" {
   description = "Number of days to retain secret after deletion (0 for immediate deletion)"

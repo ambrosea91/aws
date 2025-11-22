@@ -290,9 +290,16 @@ resource "aws_db_parameter_group" "postgres" {
   }
 }
 
+# Auto-generate secure random password for RDS
+resource "random_password" "master_password" {
+  length  = 32
+  special = true
+  # Exclude characters that might cause issues in connection strings
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
 # AWS Secrets Manager Secret for DB Password
 resource "aws_secretsmanager_secret" "db_password" {
-  count       = var.use_secrets_manager ? 1 : 0
   name        = "${var.project_name}-${var.environment}-postgres-master-password"
   description = "Master password for ${var.project_name} ${var.environment} PostgreSQL RDS instance"
 
@@ -307,11 +314,10 @@ resource "aws_secretsmanager_secret" "db_password" {
 
 # Store the initial password in Secrets Manager (without host to avoid circular dependency)
 resource "aws_secretsmanager_secret_version" "db_password" {
-  count     = var.use_secrets_manager ? 1 : 0
-  secret_id = aws_secretsmanager_secret.db_password[0].id
+  secret_id = aws_secretsmanager_secret.db_password.id
   secret_string = jsonencode({
     username = var.master_username
-    password = var.db_password
+    password = random_password.master_password.result
     engine   = "postgres"
     port     = 5432
     dbname   = var.database_name
@@ -326,11 +332,10 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 
 # Update secret with host information after RDS instance is created
 resource "aws_secretsmanager_secret_version" "db_password_with_host" {
-  count     = var.use_secrets_manager ? 1 : 0
-  secret_id = aws_secretsmanager_secret.db_password[0].id
+  secret_id = aws_secretsmanager_secret.db_password.id
   secret_string = jsonencode({
     username = var.master_username
-    password = var.db_password
+    password = random_password.master_password.result
     engine   = "postgres"
     host     = aws_db_instance.postgres.address
     endpoint = aws_db_instance.postgres.endpoint
@@ -369,7 +374,7 @@ resource "aws_db_instance" "postgres" {
   # Database configuration
   db_name  = var.database_name
   username = var.master_username
-  password = var.db_password
+  password = random_password.master_password.result
   port     = 5432
 
   # Network configuration

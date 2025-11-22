@@ -66,7 +66,6 @@ jobs:
         run: |
           terraform plan \
             -var-file="environments/${{ github.event.inputs.environment }}.tfvars" \
-            -var="db_password=${{ secrets.TF_VAR_db_password }}" \
             -out=tfplan \
             -no-color
         working-directory: ${{ env.WORKING_DIR }}
@@ -84,7 +83,6 @@ jobs:
         run: |
           terraform destroy \
             -var-file="environments/${{ github.event.inputs.environment }}.tfvars" \
-            -var="db_password=${{ secrets.TF_VAR_db_password }}" \
             -auto-approve
         working-directory: ${{ env.WORKING_DIR }}
 
