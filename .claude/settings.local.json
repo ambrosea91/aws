@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git mv:*)",
+      "Bash(move dev.tfvars environmentsdev.tfvars)",
+      "Bash(move staging.tfvars environmentsstaging.tfvars)",
+      "Bash(move prod.tfvars environmentsprod.tfvars)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

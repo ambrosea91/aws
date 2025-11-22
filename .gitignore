@@ -1,0 +1,88 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which are likely to contain sensitive data
+# The example tfvars files are safe to commit (no secrets)
+# But ensure db_password is never committed - always use TF_VAR_db_password
+*.auto.tfvars
+*.auto.tfvars.json
+secret.tfvars
+secrets.tfvars
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Ignore plan files
+*.tfplan
+*.tfplan.*
+
+# Ignore sensitive credentials
+aws-credentials-*.txt
+*.pem
+*.key
+.aws/
+credentials
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Terraform lock file (optional - some teams commit this)
+# .terraform.lock.hcl
+
+# Terraform plugin cache
+.terraform.d/
+terraform.d/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Output files
+outputs.json
+plan_output.txt
+plan_summary.txt
+
+# Logs
+*.log
+logs/
+
+# Node modules (if using any JS/TS tools)
+node_modules/
+
+# Python virtual environments (if using any Python tools)
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+temp/
+tmp/

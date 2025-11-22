@@ -1,0 +1,69 @@
+name: 'Terraform Validate'
+
+on:
+  push:
+    branches:
+      - main
+      - development
+      - 'feature/**'
+    paths:
+      - '*.tf'
+      - 'environments/*.tfvars'
+      - '.github/workflows/terraform-validate.yml'
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: '1.6.0'
+  WORKING_DIR: '.'
+
+jobs:
+  validate:
+    name: 'Validate Terraform Code'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: |
+          terraform fmt -check -recursive
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+
+      - name: Terraform Init (without backend)
+        id: init
+        run: |
+          terraform init -backend=false
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Validate
+        id: validate
+        run: |
+          terraform validate -no-color
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Check Results
+        if: steps.fmt.outcome == 'failure' || steps.validate.outcome == 'failure'
+        run: |
+          echo "::error::Terraform validation failed!"
+          if [ "${{ steps.fmt.outcome }}" == "failure" ]; then
+            echo "::error::Formatting issues found. Run 'terraform fmt -recursive' to fix."
+          fi
+          if [ "${{ steps.validate.outcome }}" == "failure" ]; then
+            echo "::error::Validation errors found. Check configuration files."
+          fi
+          exit 1
+
+      - name: Success Summary
+        if: steps.fmt.outcome == 'success' && steps.validate.outcome == 'success'
+        run: |
+          echo "✅ Terraform code is properly formatted and valid!"
