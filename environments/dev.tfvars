@@ -52,8 +52,8 @@ auto_minor_version_upgrade      = true
 multi_az = false
 
 # Alerting - empty for dev
-alarm_actions              = []
-max_connections_threshold  = 50
+alarm_actions             = []
+max_connections_threshold = 50
 
 # Additional Tags
 additional_tags = {

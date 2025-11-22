@@ -241,8 +241,8 @@ resource "aws_db_parameter_group" "postgres" {
 
   # Memory parameters
   parameter {
-    name  = "shared_buffers"
-    value = "{DBInstanceClassMemory/32768}" # ~25% of RAM
+    name         = "shared_buffers"
+    value        = "{DBInstanceClassMemory/32768}" # ~25% of RAM
     apply_method = "pending-reboot"
   }
 
@@ -307,8 +307,8 @@ resource "aws_secretsmanager_secret" "db_password" {
 
 # Store the initial password in Secrets Manager (without host to avoid circular dependency)
 resource "aws_secretsmanager_secret_version" "db_password" {
-  count         = var.use_secrets_manager ? 1 : 0
-  secret_id     = aws_secretsmanager_secret.db_password[0].id
+  count     = var.use_secrets_manager ? 1 : 0
+  secret_id = aws_secretsmanager_secret.db_password[0].id
   secret_string = jsonencode({
     username = var.master_username
     password = var.db_password
@@ -319,15 +319,15 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 
   lifecycle {
     ignore_changes = [
-      secret_string  # Ignore changes after initial creation
+      secret_string # Ignore changes after initial creation
     ]
   }
 }
 
 # Update secret with host information after RDS instance is created
 resource "aws_secretsmanager_secret_version" "db_password_with_host" {
-  count         = var.use_secrets_manager ? 1 : 0
-  secret_id     = aws_secretsmanager_secret.db_password[0].id
+  count     = var.use_secrets_manager ? 1 : 0
+  secret_id = aws_secretsmanager_secret.db_password[0].id
   secret_string = jsonencode({
     username = var.master_username
     password = var.db_password
@@ -345,7 +345,7 @@ resource "aws_secretsmanager_secret_version" "db_password_with_host" {
 
   lifecycle {
     ignore_changes = [
-      secret_string  # Ignore changes after update
+      secret_string # Ignore changes after update
     ]
   }
 }
@@ -378,10 +378,10 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible    = var.publicly_accessible
 
   # Backup configuration
-  backup_retention_period = var.backup_retention_period
-  backup_window           = var.backup_window
-  maintenance_window      = var.maintenance_window
-  skip_final_snapshot     = var.skip_final_snapshot
+  backup_retention_period   = var.backup_retention_period
+  backup_window             = var.backup_window
+  maintenance_window        = var.maintenance_window
+  skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.project_name}-${var.environment}-final-snapshot"
 
   # Enhanced monitoring

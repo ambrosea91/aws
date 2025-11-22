@@ -29,10 +29,10 @@ storage_type          = "gp3"
 storage_encrypted     = true
 
 # Database Configuration
-database_name           = "proddb"
-master_username         = "postgres"
-publicly_accessible     = false # Never public in production
-use_secrets_manager     = true  # Store password in Secrets Manager
+database_name               = "proddb"
+master_username             = "postgres"
+publicly_accessible         = false # Never public in production
+use_secrets_manager         = true  # Store password in Secrets Manager
 secret_recovery_window_days = 30
 
 # Backup Configuration - comprehensive for production
