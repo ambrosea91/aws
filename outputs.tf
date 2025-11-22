@@ -4,23 +4,23 @@
 # VPC Outputs
 output "vpc_id" {
   description = "ID of the VPC"
-  value       = aws_vpc.main.id
+  value       = local.vpc_id
 }
 
 output "vpc_cidr" {
   description = "CIDR block of the VPC"
-  value       = aws_vpc.main.cidr_block
+  value       = local.vpc_cidr
 }
 
 # Subnet Outputs
 output "public_subnet_ids" {
   description = "IDs of public subnets"
-  value       = aws_subnet.public[*].id
+  value       = var.use_existing_vpc ? [] : aws_subnet.public[*].id
 }
 
 output "private_subnet_ids" {
   description = "IDs of private subnets"
-  value       = aws_subnet.private[*].id
+  value       = local.subnet_ids
 }
 
 # Security Group Outputs
