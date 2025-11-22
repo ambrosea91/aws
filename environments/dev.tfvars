@@ -1,7 +1,7 @@
 # Development Environment Configuration
 
 environment = "dev"
-aws_region  = "us-east-1"
+aws_region  = "us-east-2"
 
 # Network Configuration
 # Option 1: Use existing VPC and subnets (uncomment and configure)
@@ -12,7 +12,7 @@ aws_region  = "us-east-1"
 # Option 2: Create new VPC and subnets (default)
 use_existing_vpc     = false
 vpc_cidr             = "10.0.0.0/16"
-availability_zones   = ["us-east-1a", "us-east-1b"]
+availability_zones   = ["us-east-2a", "us-east-2b"]
 public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
 

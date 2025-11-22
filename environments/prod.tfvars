@@ -1,7 +1,7 @@
 # Production Environment Configuration
 
 environment = "prod"
-aws_region  = "us-east-1"
+aws_region  = "us-east-2"
 
 # Network Configuration
 # Option 1: Use existing VPC and subnets (recommended for production)
@@ -12,7 +12,7 @@ aws_region  = "us-east-1"
 # Option 2: Create new VPC and subnets (default)
 use_existing_vpc     = false
 vpc_cidr             = "10.2.0.0/16"
-availability_zones   = ["us-east-1a", "us-east-1b", "us-east-1c"]
+availability_zones   = ["us-east-2a", "us-east-2b", "us-east-2c"]
 public_subnet_cidrs  = ["10.2.1.0/24", "10.2.2.0/24", "10.2.3.0/24"]
 private_subnet_cidrs = ["10.2.11.0/24", "10.2.12.0/24", "10.2.13.0/24"]
 
